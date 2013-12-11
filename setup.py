@@ -12,4 +12,5 @@ setup(
     keywords = "flask rest api",
     url = "https://github.com/benhagen/flask-restle",
     packages=find_packages(),
+    requires=['flask','arrow']
 )

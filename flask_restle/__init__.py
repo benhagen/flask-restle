@@ -2,6 +2,7 @@ from flask import json, request, current_app
 from flask.views import View
 from werkzeug.wrappers import BaseResponse
 from werkzeug.routing import BaseConverter
+import arrow
 
 # GET = Fetch
 # POST = Create new
@@ -53,7 +54,7 @@ class API(View):
 			return output
 
 		# Otherwise, wrap everything in JSON
-		if output:
+		if output is not None:
 			output = json.dumps(output, indent=4, sort_keys=True)
 		return self.build_response(output)
 
@@ -113,6 +114,41 @@ def register_api(blueprint, view, endpoint, url, pk='id', pk_type='int'):
 	blueprint.add_url_rule('%s<%s:%s>' % (url, pk_type, pk), view_func=view_func, methods=['GET', 'PUT', 'DELETE'])
 
 
+#
+# Extend the default JSON encoder
+# Add the following to your app:
+#	app.json_encoder = CustomJSONEncoder
+#	app.json_decoder = CustomJSONDecoder
+
+class CustomJSONEncoder(json.JSONEncoder):
+	""" Adds a few features to the vanilla encoder (its a lie) """
+
+	def __init__(self, *args, **kwargs):
+		json.JSONEncoder.__init__(self, *args, **kwargs)
+
+	def default(self, obj):
+		# Override the default serializer if an object has a "json_serializer" function already defined
+		if "json_serializer" in dir(obj):
+			return obj.json_serializer()
+		# Handle sets as lists
+		if type(obj) is set:
+			return list(obj)
+		# Convert Arrow objects to timestamps
+		if type(obj) is arrow.arrow.Arrow:
+			return obj.timestamp
+		return json.JSONEncoder.default(self, obj)
+
+
+class CustomJSONDecoder(json.JSONDecoder):
+	""" Adds a few features to the vanilla decoder """
+
+	def __init__(self, *args, **kwargs):
+		kwargs.setdefault('object_hook', self.object_hook)
+		json.JSONDecoder.__init__(self, *args, **kwargs)
+
+	def object_hook(self, obj):
+		return obj
+
 
 #
 # Some helpful converters for URL matching
@@ -137,7 +173,6 @@ class CidrConverter(BaseConverter):
 	def __init__(self, url_map):
 		super(CidrConverter, self).__init__(url_map)
 		self.regex = "(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(\/([1-2]\d|3[0-2]|\d))"
-
 
 def extend_converters(app):
 	app.url_map.converters['regex'] = RegexConverter
