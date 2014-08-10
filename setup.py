@@ -8,7 +8,7 @@ setup(
     author = "Ben Hagen",
     author_email = "benhagen@gmail.com",
     description = "In order to facilitate dumb, RESTful-like, API's.",
-    license = "BSD",
+    license = "MIT",
     keywords = "flask rest api",
     url = "https://github.com/benhagen/flask-restle",
     packages=find_packages(),

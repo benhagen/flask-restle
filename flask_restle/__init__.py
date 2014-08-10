@@ -93,11 +93,12 @@ class api_error(Exception):
 
 	def to_dict(self):
 		rv = dict(self.payload or ())
-		rv['message'] = self.message
+		rv['error_message'] = self.message
 		return rv
 
 	def response(self):
 		return current_app.response_class(json.dumps(self.to_dict(), indent=4, sort_keys=True), status=self.status_code, mimetype='application/json')
+
 
 #
 # Helper function to automagically register some normal recipes
@@ -105,9 +106,9 @@ class api_error(Exception):
 def register_api(blueprint, view, endpoint, url, pk='id', pk_type='int'):
 	view_func = view.as_view(endpoint)
 	# GET - List
-	blueprint.add_url_rule(url, defaults={pk: None}, view_func=view_func, methods=['GET',])
+	blueprint.add_url_rule(url, defaults={pk: None}, view_func=view_func, methods=['GET'])
 	# POST - Create
-	blueprint.add_url_rule(url, view_func=view_func, methods=['POST',])
+	blueprint.add_url_rule(url, view_func=view_func, methods=['POST'])
 	# GET - Fetch one
 	# PUT - Update
 	# DELETE - Delete
@@ -128,15 +129,28 @@ class CustomJSONEncoder(json.JSONEncoder):
 
 	def default(self, obj):
 		# Override the default serializer if an object has a "json_serializer" function already defined
-		if "json_serializer" in dir(obj):
+		json_serializer = getattr(obj, "json_serializer", None)
+		if callable(json_serializer):
 			return obj.json_serializer()
 		# Handle sets as lists
 		if type(obj) is set:
 			return list(obj)
-		# Convert Arrow objects to timestamps
+		# Convert Arrow objects to isoformat
 		if type(obj) is arrow.arrow.Arrow:
-			return obj.timestamp
+			return obj.isoformat()
 		return json.JSONEncoder.default(self, obj)
+
+
+
+# Make some stuff serializable
+class JsonEncoder(json.JSONEncoder):
+	def default(self, obj):
+		json_serializer = getattr(obj, "json_serializer", None)
+		if callable(json_serializer):
+		    return json_serializer()
+		return json.JSONEncoder.default(self, obj)
+
+
 
 
 class CustomJSONDecoder(json.JSONDecoder):
@@ -180,3 +194,12 @@ def extend_converters(app):
 	app.url_map.converters['ip'] = IPv4Converter
 	app.url_map.converters['cidr'] = CidrConverter
 	return app
+
+def restle(app):
+	extend_converters(app)
+	app.json_encoder = CustomJSONEncoder
+	app.json_decoder = CustomJSONDecoder
+
+	@app.errorhandler(api_error)
+	def handle_invalid_usage(error):
+		return error.response()
